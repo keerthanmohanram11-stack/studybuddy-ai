@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>StudyBuddy AI</title>
+  <meta name="description" content="Your AI study partner: doubts, quizzes, planner and progress tracking.">
+  <meta name="theme-color" content="#0B0A12">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/core.js"></script>
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="toasts"></div>
+
+  <!-- Splash screen -->
+  <div id="splash" class="overlay">
+    <div class="logo">📚</div>
+    <h2>StudyBuddy AI</h2>
+    <p class="muted">Your smart study partner</p>
+  </div>
+
+  <!-- First-time setup (filled by js/onboard.js) -->
+  <div id="onboard" class="overlay hidden"></div>
+
+  <!-- All screens appear here -->
+  <main class="app" id="views"></main>
+
+  <!-- Bottom menu -->
+  <nav class="nav glass" aria-label="Main menu">
+    <a href="#home" data-tab="home"><span style="font-size:20px">🏠</span>Home</a>
+    <a href="#learn" data-tab="learn"><span style="font-size:20px">📚</span>Learn</a>
+    <a href="#practice" data-tab="practice"><span style="font-size:20px">✏️</span>Practice</a>
+    <a href="#progress" data-tab="progress"><span style="font-size:20px">📊</span>Progress</a>
+    <a href="#profile" data-tab="profile"><span style="font-size:20px">👤</span>Profile</a>
+  </nav>
+
+  <script src="js/home.js"></script>
+  <script src="js/learn.js"></script>
+  <script src="js/practice.js"></script>
+  <script src="js/progress.js"></script>
+  <script src="js/profile.js"></script>
+  <script src="js/onboard.js"></script>
+  <script>
+    applyTheme();
+    // Hide the splash, then show setup (first time) or the app
+    setTimeout(() => {
+      $("#splash").classList.add("gone");
+      setTimeout(() => $("#splash").remove(), 450);
+      if (!getProfile().onboarded) startOnboarding();
+      else render();
+    }, 900);
+    // Install support + offline cache
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    }
+  </script>
+</body>
+</html>
