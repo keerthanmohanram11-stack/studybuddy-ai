@@ -1,0 +1,37 @@
+// Key checker: open /api/test in the browser to see if your AI keys work
+module.exports = async (req, res) => {
+  const out = { deployed: process.env.VERCEL_GIT_COMMIT_SHA ? process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7) : "unknown" };
+
+  function describe(name, prefix) {
+    const raw = process.env[name];
+    if (!raw) return { found: false, problem: "Key is MISSING in Vercel (or you didn't Redeploy after adding it)" };
+    const info = {
+      found: true,
+      length: raw.length,
+      looksLike: raw.slice(0, 4) + "..." + raw.slice(-2),
+      hasSpaces: raw !== raw.trim() || /\s/.test(raw)
+    };
+    if (info.hasSpaces) info.problem = "Key has a SPACE or new line in it. Re-paste it carefully.";
+    else if (!raw.startsWith(prefix)) info.problem = "Key should start with " + prefix + ". You may have pasted the wrong thing.";
+    return info;
+  }
+
+  out.groq = describe("GROQ_API_KEY", "gsk_");
+  out.gemini = describe("GEMINI_API_KEY", "AIza");
+
+  if (out.groq.found) {
+    try {
+      const r = await fetch("https://api.groq.com/openai/v1/models", { headers: { Authorization: "Bearer " + process.env.GROQ_API_KEY.trim() } });
+      out.groq.test = r.ok ? "✅ WORKS" : "❌ Groq says: " + ((await r.json()).error?.message || r.status);
+    } catch (e) { out.groq.test = "❌ " + e.message; }
+  }
+  if (out.gemini.found) {
+    try {
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?key=" + encodeURIComponent(process.env.GEMINI_API_KEY.trim()));
+      out.gemini.test = r.ok ? "✅ WORKS" : "❌ Google says: " + ((await r.json()).error?.message || r.status);
+    } catch (e) { out.gemini.test = "❌ " + e.message; }
+  }
+
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.status(200).send(JSON.stringify(out, null, 2));
+};
