@@ -54,7 +54,7 @@
       setTimeout(() => $("#splash").remove(), 450);
       if (!getProfile().onboarded) startOnboarding();
       else render();
-    }, 900);
+    }, 500);
     // Install support + offline cache
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

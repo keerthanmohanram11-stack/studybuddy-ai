@@ -23,7 +23,7 @@ const DEFAULT_PROFILE = {
   expert: "All-rounder tutor", personality: "Friendly buddy",
   styles: ["Step by step", "Real-life examples"],
   language: "English", theme: "dark-glass", textSize: 1,
-  lite: false, lowData: false, hintFirst: true, speak: false, onboarded: false
+  lite: false, lowData: false, hintFirst: true, tutorMode: "Socratic", dailyGoal: 50, focusLock: true, speak: false, onboarded: false
 };
 function getProfile() { return Object.assign({}, DEFAULT_PROFILE, Store.get("profile", {})); }
 function saveProfile(p) { Store.set("profile", p); applyTheme(); }
@@ -79,6 +79,7 @@ function systemPrompt(extra) {
     "Reply in " + p.language + (p.language === "Hinglish" ? " (Hindi written in English letters, mixed with English)." : "."),
     "Use short paragraphs, simple words, and bullet points or numbered steps when helpful.",
     "If you are not sure about a fact, say so. Never invent sources. Keep content safe for children.",
+    "Be warm and encouraging. Praise effort, not just correct answers.",
     extra || ""
   ].join(" ");
 }
@@ -98,6 +99,7 @@ async function ai(prompt, opts = {}) {
         image: opts.image || null,
         file: opts.file || null,
         json: !!opts.json,
+        check: opts.check || "",
         search: !!opts.search
       })
     });
@@ -140,8 +142,9 @@ function dayKey(daysAgo = 0) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 function getStats() {
-  return Object.assign({ xp: 0, streak: 0, lastDay: "", activity: {}, counts: {} }, Store.get("stats", {}));
+  return Object.assign({ xp: 0, streak: 0, lastDay: "", activity: {}, counts: {}, xpDays: {} }, Store.get("stats", {}));
 }
+function todayXP() { return getStats().xpDays[dayKey()] || 0; }
 function streakNow() {
   const s = getStats();
   return (s.lastDay === dayKey() || s.lastDay === dayKey(1)) ? s.streak : 0;
@@ -152,7 +155,10 @@ function levelInfo(xp) { return { level: Math.floor(xp / 100) + 1, progress: xp 
 function addXP(amount, counter) {
   const s = getStats();
   const before = levelInfo(s.xp).level;
+  const goal = getProfile().dailyGoal || 50;
+  const hadGoal = (s.xpDays[dayKey()] || 0) >= goal;
   s.xp += amount;
+  s.xpDays[dayKey()] = (s.xpDays[dayKey()] || 0) + amount;
   s.activity[dayKey()] = (s.activity[dayKey()] || 0) + 1;
   if (counter) s.counts[counter] = (s.counts[counter] || 0) + 1;
   if (s.lastDay !== dayKey()) {
@@ -160,6 +166,8 @@ function addXP(amount, counter) {
     s.lastDay = dayKey();
   }
   Store.set("stats", s);
+  if (!hadGoal && s.xpDays[dayKey()] >= goal) { toast("🎯 Daily goal done! " + goal + " XP today. You're on fire!"); confetti(); }
+  else if (amount >= 5 && Math.random() < 0.25 && !($("#toasts") || {}).children?.length) toast(cheer());
   if (levelInfo(s.xp).level > before) {
     toast("🎉 Level up! You're now Level " + levelInfo(s.xp).level);
     confetti();
@@ -197,6 +205,48 @@ function difficultyFor(topic) {
   return t.score < 50 ? "easy" : t.score > 80 ? "hard" : "medium";
 }
 
+// ---------- Motivation ----------
+const QUOTES = [
+  "Small steps every day add up to big results. 🌱",
+  "You don't have to be great to start, but you have to start to be great.",
+  "Mistakes are proof that you are trying. 💪",
+  "Focus on progress, not perfection.",
+  "The expert in anything was once a beginner.",
+  "Every page you study today is a mark you earn tomorrow. 📚",
+  "Your future self will thank you for this hour.",
+  "Discipline is choosing what you want most over what you want now.",
+  "One more question. One more page. You've got this! 🔥",
+  "Dreams don't work unless you do.",
+  "Don't watch the clock; do what it does. Keep going. ⏰",
+  "Hard work beats talent when talent doesn't work hard.",
+  "Believe you can and you're halfway there. ⭐",
+  "Success is the sum of small efforts repeated day after day.",
+  "Stay focused. The phone can wait, your goals can't. 📵"
+];
+const CHEERS = ["🔥 Great work! Keep going!", "💪 You're getting stronger!", "⭐ Nice! Every bit counts.", "🚀 You're on a roll!", "🧠 Your brain is growing!"];
+function quoteOfDay() { const d = new Date(); return QUOTES[(d.getDate() + d.getMonth() * 31) % QUOTES.length]; }
+function randomQuote() { return QUOTES[Math.floor(Math.random() * QUOTES.length)]; }
+function cheer() { return CHEERS[Math.floor(Math.random() * CHEERS.length)]; }
+
+// ---------- Smart flashcards (spaced repetition) ----------
+// Each card sits in a "box". Got it = next box (seen less often). Again = back to box 0 (seen again soon).
+const BOX_DAYS = [0, 1, 3, 7, 14, 30];
+function getDecks() { return Store.get("decks", []); }
+function saveDecks(d) { Store.set("decks", d); }
+function addDeck(topic, cards) {
+  const decks = getDecks();
+  const deck = { id: Date.now(), topic, created: dayKey(), cards: cards.map(c => ({ front: c.front, back: c.back, box: 0, due: 0 })) };
+  decks.unshift(deck);
+  saveDecks(decks.slice(0, 40));
+  return deck;
+}
+function dueCards(deck) { return deck.cards.filter(c => (c.due || 0) <= Date.now()); }
+function totalDueCards() { return getDecks().reduce((n, d) => n + dueCards(d).length, 0); }
+function gradeCard(card, gotIt) {
+  card.box = gotIt ? Math.min(card.box + 1, BOX_DAYS.length - 1) : 0;
+  card.due = gotIt ? Date.now() + BOX_DAYS[card.box] * 86400000 : Date.now();
+}
+
 // ---------- Badges ----------
 const BADGES = [
   { id: "first-q", ico: "💬", name: "First question", test: s => (s.counts.questions || 0) >= 1 },
@@ -210,7 +260,10 @@ const BADGES = [
   { id: "streak3", ico: "🔥", name: "3-day streak", test: s => s.streak >= 3 },
   { id: "streak7", ico: "🌟", name: "7-day streak", test: s => s.streak >= 7 },
   { id: "lvl5", ico: "🚀", name: "Level 5", test: s => levelInfo(s.xp).level >= 5 },
-  { id: "daily", ico: "🎯", name: "Daily challenger", test: s => (s.counts.daily || 0) >= 1 }
+  { id: "daily", ico: "🎯", name: "Daily challenger", test: s => (s.counts.daily || 0) >= 1 },
+  { id: "cards50", ico: "🃏", name: "Card master (50 cards)", test: s => (s.counts.cardsGot || 0) >= 50 },
+  { id: "focus5", ico: "🌳", name: "Focus forest (5 sessions)", test: s => (s.counts.focus || 0) >= 5 },
+  { id: "notes", ico: "🗂️", name: "Note keeper", test: s => (s.counts.notes || 0) >= 1 }
 ];
 function checkBadges() {
   const s = getStats();

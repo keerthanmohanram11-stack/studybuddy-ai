@@ -294,3 +294,13 @@ body.no-nav .nav { display: none; }
 body.has-inputbar .app { padding-bottom: 200px; }
 summary::-webkit-details-marker { display: none; }
 code { background: var(--tint); padding: 1px 5px; border-radius: 6px; }
+
+/* ---------- Upgrades: tutor label, quotes, focus mode, report ---------- */
+.ai-label { font-size: 11px; color: var(--muted); margin-top: 8px; opacity: .8; }
+.quote { font-style: italic; color: var(--muted); text-align: center; line-height: 1.5; margin: 4px 0; }
+.plant { font-size: 40px; line-height: 1; margin-bottom: 2px; transition: transform .4s; }
+body.focusing .plant { animation: sway 3s ease-in-out infinite; }
+@keyframes sway { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+.bar.goal > div { background: linear-gradient(90deg, #7BE495, #FFD67A); }
+pre.report { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: calc(14px * var(--fs)); line-height: 1.6; margin: 0; color: var(--text); }
+#fcAway { background: var(--base2); }

@@ -13,6 +13,13 @@ view("home", {
     <div class="glass card">
       <div class="row between"><b id="hLevel">Level 1</b><span class="muted small" id="hLevelTxt">0 / 100 XP</span></div>
       <div class="bar" style="margin-top:10px"><div id="hBar" style="width:0%"></div></div>
+      <div class="row between" style="margin-top:12px"><span class="small">🎯 Today's goal</span><span class="muted small" id="hGoalTxt">0 / 50 XP</span></div>
+      <div class="bar goal" style="margin-top:6px"><div id="hGoal" style="width:0%"></div></div>
+    </div>
+
+    <div class="glass card row" style="gap:12px">
+      <div style="font-size:30px">💬</div>
+      <p class="quote grow" id="hQuote" style="margin:0;text-align:left"></p>
     </div>
 
     <div class="glass card row" style="gap:14px; align-items:flex-start">
@@ -31,9 +38,9 @@ view("home", {
       <a class="glass tile" href="#tutor"><span class="ico">🤖</span><b>AI Tutor</b><span>Ask doubts</span></a>
       <a class="glass tile" href="#snap"><span class="ico">📸</span><b>Snap</b><span>Scan notes</span></a>
       <a class="glass tile" href="#quiz"><span class="ico">📝</span><b>Quiz</b><span>Test yourself</span></a>
-      <a class="glass tile" href="#cards"><span class="ico">🃏</span><b>Flashcards</b><span>Flip &amp; recall</span></a>
+      <a class="glass tile" href="#notes"><span class="ico">🗂️</span><b>Notes</b><span>Organise</span></a>
       <a class="glass tile" href="#planner"><span class="ico">📅</span><b>Planner</b><span>Exam plan</span></a>
-      <a class="glass tile" href="#focus"><span class="ico">⏱️</span><b>Focus</b><span>Timer</span></a>
+      <a class="glass tile" href="#focus"><span class="ico">🌳</span><b>Focus</b><span>Grow a tree</span></a>
     </div>
 
     <div class="glass card row" id="hDaily" style="cursor:pointer">
@@ -56,7 +63,13 @@ view("home", {
     const lv = levelInfo(s.xp);
     $("#hLevel", el).textContent = "Level " + lv.level;
     $("#hLevelTxt", el).textContent = lv.progress + " / 100 XP";
-    requestAnimationFrame(() => { $("#hBar", el).style.width = lv.progress + "%"; });
+    const goal = p.dailyGoal || 50, today = todayXP();
+    $("#hGoalTxt", el).textContent = Math.min(today, goal) + " / " + goal + " XP" + (today >= goal ? " ✅" : "");
+    $("#hQuote", el).textContent = quoteOfDay();
+    requestAnimationFrame(() => {
+      $("#hBar", el).style.width = lv.progress + "%";
+      $("#hGoal", el).style.width = Math.min(100, Math.round(today / goal * 100)) + "%";
+    });
 
     const daily = Store.get("daily", {});
     $("#hDailyTxt", el).textContent = daily.date === dayKey() && daily.done ? "✅ Done for today! Come back tomorrow." : "One quick question · +30 XP";
@@ -71,6 +84,9 @@ view("home", {
       const days = Math.round((new Date(exams[0].date) - new Date(dayKey())) / 86400000);
       alerts.push({ ico: "⏳", t: exams[0].subject + " exam in " + days + (days === 1 ? " day" : " days"), href: "#planner" });
     }
+    const cardsDue = totalDueCards();
+    if (cardsDue) alerts.push({ ico: "🃏", t: cardsDue + " flashcards ready to review", href: "#cards?due=1" });
+    if (!today) alerts.push({ ico: "🌱", t: "Start small: one 15-minute focus session today", href: "#focus" });
     const due = revisionDue();
     if (due.length) alerts.push({ ico: "🔁", t: "Time to revise: " + due[0].name, href: "#quiz?topic=" + encodeURIComponent(due[0].name) });
     else {

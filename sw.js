@@ -1,5 +1,5 @@
 // Service worker: makes the app installable, opens instantly and works offline
-const CACHE = "studybuddy-v3";
+const CACHE = "studybuddy-v4";
 const FILES = [
   "/", "/index.html", "/manifest.json", "/css/app.css",
   "/js/core.js", "/js/home.js", "/js/learn.js", "/js/practice.js",

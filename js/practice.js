@@ -8,7 +8,7 @@ view("practice", {
     </a>
     <div class="grid2">
       <a class="glass tile" href="#quiz"><span class="ico">📝</span><b>AI Quiz</b><span>Adapts to you</span></a>
-      <a class="glass tile" href="#cards"><span class="ico">🃏</span><b>Flashcards</b><span>Flip &amp; recall</span></a>
+      <a class="glass tile" href="#cards"><span class="ico">🃏</span><b>Smart cards</b><span>Remember forever</span></a>
       <a class="glass tile" href="#mock"><span class="ico">🎓</span><b>Mock exam</b><span>Timed test</span></a>
       <a class="glass tile" href="#checker"><span class="ico">✍️</span><b>Answer checker</b><span>Marks like a teacher</span></a>
       <a class="glass tile" href="#viva"><span class="ico">🎤</span><b>Viva practice</b><span>Speak your answers</span></a>
@@ -138,50 +138,127 @@ view("quiz", {
   }
 });
 
-// ---------- Flashcards ----------
+// ---------- Smart flashcards (spaced repetition) ----------
 view("cards", {
   tab: "practice",
   html: () => `
-    ${head("🃏 Flashcards", "Tap a card to flip it")}
-    <div class="row"><input type="text" id="fcTopic" placeholder="Topic, e.g. Parts of a cell"><button class="btn" id="fcGo">Make</button></div>
+    ${head("🃏 Smart flashcards", "Cards you find hard come back sooner")}
+    <div class="row"><input type="text" id="fcTopic" placeholder="New deck topic, e.g. Parts of a cell"><button class="btn" id="fcGo">Make</button></div>
     <div id="fcArea"></div>
+    <div id="fcDecks" class="col"></div>
   `,
   init(el) {
+    const self = this;
     const area = $("#fcArea", el);
-    let cards = [], i = 0, topic = "";
-    function show() {
-      const c = cards[i];
-      area.innerHTML = `
-        <p class="muted center small" style="margin-bottom:8px">Card ${i + 1} of ${cards.length}</p>
-        <div class="flip" id="fcFlip"><div class="flip-inner"><div class="glass face">${esc(c.front)}</div><div class="glass face back">${esc(c.back)}</div></div></div>
-        <div class="row" style="margin-top:12px">
-          <button class="btn ghost grow" id="fcPrev">← Back</button>
-          <button class="btn ghost" id="fcSay" aria-label="Listen">🔊</button>
-          <button class="btn grow" id="fcNext">${i < cards.length - 1 ? "Next →" : "Finish"}</button>
-        </div>
-        <button class="btn ghost full" id="fcSave" style="margin-top:10px">🔖 Save this deck</button>`;
-      $("#fcFlip", area).onclick = e => e.currentTarget.classList.toggle("on");
-      $("#fcPrev", area).onclick = () => { if (i > 0) { i--; show(); } };
-      $("#fcSay", area).onclick = () => speak(c.front + ". " + c.back);
-      $("#fcNext", area).onclick = () => {
-        if (i < cards.length - 1) { i++; show(); }
-        else { addXP(5, "cards"); area.innerHTML = `<div class="glass card center">🎉 Deck done! <a href="#quiz?topic=${encodeURIComponent(topic)}">Take a quiz on it →</a></div>`; }
-      };
-      $("#fcSave", area).onclick = () => saveItem("Flashcards: " + topic, cards.map(c => "**" + c.front + "**\n" + c.back).join("\n\n"), "Flashcards");
+    let deckId = null, queue = [], done = 0, got = 0;
+
+    function review(deck, all) {
+      deckId = deck.id;
+      queue = (all ? deck.cards : dueCards(deck)).map((c, i) => deck.cards.indexOf(c));
+      if (!queue.length) { toast("✅ Nothing due in this deck. Come back later!"); return; }
+      done = 0; got = 0;
+      $("#fcDecks", el).classList.add("hidden");
+      showCard();
     }
-    async function make() {
-      topic = $("#fcTopic", el).value.trim();
+    function showCard() {
+      const deck = getDecks().find(d => d.id === deckId);
+      if (!queue.length) return finish(deck);
+      const c = deck.cards[queue[0]];
+      area.innerHTML = `
+        <div class="row between small muted" style="margin-bottom:8px"><span>${esc(deck.topic)}</span><span>${queue.length} left</span></div>
+        <div class="flip" id="fcFlip"><div class="flip-inner"><div class="glass face">${esc(c.front)}</div><div class="glass face back">${esc(c.back)}</div></div></div>
+        <p class="muted small center" id="fcHint" style="margin-top:8px">Think of the answer, then tap the card to check</p>
+        <div class="row hidden" id="fcGrade" style="margin-top:10px">
+          <button class="btn ghost grow" id="fcAgain">😕 Again</button>
+          <button class="btn grow" id="fcGot">🙂 Got it</button>
+        </div>
+        <div class="row" style="margin-top:10px"><button class="btn sm ghost" id="fcSay">🔊 Listen</button><button class="btn sm ghost" id="fcStop">⏹ Stop</button></div>`;
+      $("#fcFlip", area).onclick = e => {
+        e.currentTarget.classList.toggle("on");
+        $("#fcGrade", area).classList.remove("hidden");
+        $("#fcHint", area).classList.add("hidden");
+      };
+      $("#fcSay", area).onclick = () => speak(c.front + ". " + c.back);
+      $("#fcStop", area).onclick = () => finish(deck);
+      const grade = gotIt => {
+        const decks = getDecks();
+        const d = decks.find(x => x.id === deckId);
+        gradeCard(d.cards[queue[0]], gotIt);
+        saveDecks(decks);
+        const idx = queue.shift();
+        if (gotIt) { got++; const s = getStats(); s.counts.cardsGot = (s.counts.cardsGot || 0) + 1; Store.set("stats", s); }
+        else queue.push(idx); // see it again at the end of this round
+        done++;
+        showCard();
+      };
+      $("#fcAgain", area).onclick = () => grade(false);
+      $("#fcGot", area).onclick = () => grade(true);
+    }
+    function finish(deck) {
+      if (got) addXP(Math.min(30, got * 2), "cards");
+      area.innerHTML = `<div class="glass card col center" style="align-items:center">
+        <div style="font-size:44px">🎉</div><h3>Round done!</h3>
+        <p class="muted">${got} cards remembered. Hard cards will come back sooner, easy ones later.</p>
+        <a class="btn ghost" href="#quiz?topic=${encodeURIComponent(deck.topic)}">📝 Quiz me on ${esc(deck.topic)}</a></div>`;
+      $("#fcDecks", el).classList.remove("hidden");
+      self.paintDecks(el);
+    }
+    async function make(topic, sourceText) {
       if (!topic) { toast("Type a topic first"); return; }
       area.innerHTML = `<div class="glass card">${LOADING}</div>`;
       try {
-        const d = await aiJSON('Make 8 flashcards on "' + topic + '" for my class. Return JSON: {"cards":[{"front":"short question or term","back":"short clear answer"}]}');
-        cards = (d.cards || []).filter(c => c.front && c.back);
+        const prompt = sourceText
+          ? 'Make 10 flashcards from these notes. Return JSON: {"cards":[{"front":"short question or term","back":"short clear answer"}]}. Notes:\n' + sourceText.slice(0, 6000)
+          : 'Make 10 flashcards on "' + topic + '" for my class. Return JSON: {"cards":[{"front":"short question or term","back":"short clear answer"}]}';
+        const d = await aiJSON(prompt);
+        const cards = (d.cards || []).filter(c => c.front && c.back);
         if (!cards.length) throw new Error("No cards came back. Try again.");
-        i = 0; show();
+        const deck = addDeck(topic, cards);
+        toast("🃏 Deck saved: " + cards.length + " cards");
+        $("#fcTopic", el).value = "";
+        review(deck, true);
       } catch (e) { area.innerHTML = `<div class="glass card">⚠️ ${esc(e.message)}</div>`; }
     }
-    $("#fcGo", el).addEventListener("click", make);
-    $("#fcTopic", el).addEventListener("keydown", e => { if (e.key === "Enter") make(); });
+    $("#fcGo", el).addEventListener("click", () => make($("#fcTopic", el).value.trim()));
+    $("#fcTopic", el).addEventListener("keydown", e => { if (e.key === "Enter") make($("#fcTopic", el).value.trim()); });
+    this._review = review;
+    this._make = make;
+  },
+  paintDecks(el) {
+    const decks = getDecks();
+    const box = $("#fcDecks", el);
+    if (!decks.length) { box.innerHTML = `<div class="glass empty">No decks yet. Type a topic above and tap Make.</div>`; return; }
+    box.innerHTML = `<h3>📚 Your decks</h3>` + decks.map(d => {
+      const due = dueCards(d).length, known = d.cards.filter(c => c.box >= 3).length;
+      return `<div class="glass item">
+        <div class="grow"><b>${esc(d.topic)}</b><span class="muted small">${d.cards.length} cards · ${known} mastered · ${due ? "<b style='color:var(--accent)'>" + due + " due</b>" : "✅ nothing due"}</span></div>
+        <button class="btn sm" data-r="${d.id}">${due ? "Review" : "Practise"}</button>
+        <button class="icon-btn" data-x="${d.id}" aria-label="Delete deck" style="width:36px;height:36px">🗑️</button></div>`;
+    }).join("");
+    $$("[data-r]", box).forEach(b => b.onclick = () => {
+      const d = getDecks().find(x => String(x.id) === b.dataset.r);
+      this._review(d, !dueCards(d).length);
+    });
+    $$("[data-x]", box).forEach(b => b.onclick = () => {
+      if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = "✓?"; toast("Tap again to delete this deck"); return; }
+      saveDecks(getDecks().filter(x => String(x.id) !== b.dataset.x)); this.paintDecks(el);
+    });
+  },
+  show(el, params) {
+    $("#fcArea", el).innerHTML = "";
+    $("#fcDecks", el).classList.remove("hidden");
+    this.paintDecks(el);
+    const noteId = params.get("note");
+    if (noteId) {
+      const n = Store.get("notes", []).find(x => String(x.id) === noteId);
+      if (n) this._make(n.title, n.text);
+      history.replaceState(null, "", "#cards");
+    }
+    if (params.get("due")) {
+      const d = getDecks().find(x => dueCards(x).length);
+      if (d) this._review(d, false);
+      history.replaceState(null, "", "#cards");
+    }
   }
 });
 
