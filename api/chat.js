@@ -1,10 +1,10 @@
-// StudyBuddy AI server: Groq (fast text) + Gemini (photos, PDFs, web search) + OpenRouter (free backup)
+// Wayfinder server: Groq (fast text) + Gemini (photos, PDFs, web search) + OpenRouter (free backup)
 // Keys live in Vercel > Settings > Environment Variables: GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY (optional)
 
 const GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
 const GEMINI_MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest"];
 const OPENROUTER_MODELS = ["openrouter/free"];
-const DEFAULT_SYSTEM = "You are StudyBuddy, a friendly tutor for school students. Explain in simple words, step by step.";
+const DEFAULT_SYSTEM = "You are Wayfinder, a friendly tutor for school students. Explain in simple words, step by step.";
 const TIMEOUT_MS = 15000; // give up on a slow AI quickly and try the next one
 
 // Read a key and remove any accidental spaces or new lines

@@ -1,10 +1,10 @@
 // Service worker: makes the app installable, opens instantly and works offline
-const CACHE = "studybuddy-v4";
+const CACHE = "wayfinder-v2";
 const FILES = [
   "/", "/index.html", "/manifest.json", "/css/app.css",
   "/js/core.js", "/js/home.js", "/js/learn.js", "/js/practice.js",
   "/js/progress.js", "/js/profile.js", "/js/onboard.js",
-  "/icons/icon-192.png", "/icons/icon-512.png"
+  "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png", "/icons/logo.png"
 ];
 
 self.addEventListener("install", e => {

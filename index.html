@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>StudyBuddy AI</title>
-  <meta name="description" content="Your AI study partner: doubts, quizzes, planner and progress tracking.">
-  <meta name="theme-color" content="#0B0A12">
+  <title>Wayfinder: Find your way to every answer</title>
+  <meta name="description" content="Wayfinder: an AI tutor that guides you to every answer, quizzes you and shows you where to improve.">
+  <meta name="theme-color" content="#0C0B11">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -16,13 +16,14 @@
 </head>
 <body>
   <div id="bg"></div>
+  <div id="floaters" aria-hidden="true"></div>
   <div id="toasts"></div>
 
   <!-- Splash screen -->
   <div id="splash" class="overlay">
-    <div class="logo">📚</div>
-    <h2>StudyBuddy AI</h2>
-    <p class="muted">Your smart study partner</p>
+    <div class="logo logo-img"><img src="icons/logo.png" alt="Wayfinder logo"></div>
+    <h2 class="brand">Wayfinder</h2>
+    <p class="muted slogan">Find your way to every answer</p>
   </div>
 
   <!-- First-time setup (filled by js/onboard.js) -->

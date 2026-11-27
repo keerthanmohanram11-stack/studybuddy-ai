@@ -1,4 +1,4 @@
-// ================= StudyBuddy AI: core (shared by every screen) =================
+// ================= Wayfinder: core (shared by every screen) =================
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
 const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -63,6 +63,7 @@ function applyTheme() {
   r.style.setProperty("--accent", t.accent);
   r.style.setProperty("--fs", p.textSize || 1);
   if (document.body) document.body.classList.toggle("lite", !!p.lite);
+  if (document.body && typeof startFloaters === "function" && document.getElementById("floaters") && applyTheme._lite !== !!p.lite) { applyTheme._lite = !!p.lite; startFloaters(); }
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = t.base[1];
 }
@@ -72,7 +73,7 @@ applyTheme();
 function systemPrompt(extra) {
   const p = getProfile();
   return [
-    "You are StudyBuddy, an AI " + p.expert + " for an Indian school student.",
+    "You are Wayfinder, an AI " + p.expert + " for an Indian school student.",
     "Student: " + p.grade + ", " + p.board + " board. Subjects: " + p.subjects.join(", ") + ".",
     "Follow the NCERT/" + p.board + " syllabus for this class where it applies.",
     "Personality: " + p.personality + ". Teaching style: " + p.styles.join(", ") + ".",
@@ -80,6 +81,7 @@ function systemPrompt(extra) {
     "Use short paragraphs, simple words, and bullet points or numbered steps when helpful.",
     "If you are not sure about a fact, say so. Never invent sources. Keep content safe for children.",
     "Be warm and encouraging. Praise effort, not just correct answers.",
+    learnerMemory(),
     extra || ""
   ].join(" ");
 }
@@ -134,7 +136,11 @@ function fmt(text) {
   t = t.replace(/`([^`]+)`/g, "<code>$1</code>");
   return t.replace(/\n/g, "<br>");
 }
-const LOADING = '<div class="row"><div class="typing"><i></i><i></i><i></i></div><span class="muted">Thinking…</span></div>';
+// Loading message: a different fun line each time the AI is thinking
+const LOADING_LINES = ["Finding the best path… 🧭", "Checking the map… 🗺️", "Lighting the way… 💡", "Connecting the dots… ✨", "Charting your route… 🚀", "Thinking it through… 🧠"];
+Object.defineProperty(window, "LOADING", {
+  get: () => '<div class="row"><div class="typing"><i></i><i></i><i></i></div><span class="muted">' + LOADING_LINES[Math.floor(Math.random() * LOADING_LINES.length)] + '</span></div>'
+});
 
 // ---------- XP, levels, streaks, counters ----------
 function dayKey(daysAgo = 0) {
@@ -203,6 +209,84 @@ function difficultyFor(topic) {
   const t = topicList().find(x => x.name.toLowerCase() === String(topic).toLowerCase());
   if (!t) return "medium";
   return t.score < 50 ? "easy" : t.score > 80 ? "hard" : "medium";
+}
+
+// ---------- Learning memory: mistakes + what the AI should know about the student ----------
+function getMistakes() { return Store.get("mistakes", []); }
+function addMistakes(list) {
+  if (!list.length) return;
+  Store.set("mistakes", list.map(m => Object.assign({ date: dayKey() }, m)).concat(getMistakes()).slice(0, 80));
+}
+function learnerMemory() {
+  try {
+    const weak = weakTopics().slice(0, 4).map(t => t.name + " (" + t.score + "%)");
+    const strong = topicList().filter(t => t.score >= 80).slice(0, 3).map(t => t.name);
+    const recent = getMistakes().slice(0, 3).map(m => '"' + String(m.q).slice(0, 70) + '"');
+    const bits = [];
+    if (weak.length) bits.push("Weak topics: " + weak.join(", ") + ".");
+    if (strong.length) bits.push("Strong topics: " + strong.join(", ") + ".");
+    if (recent.length) bits.push("Recently got these wrong: " + recent.join("; ") + ".");
+    return bits.length ? "What you know about this student (use it only when relevant, e.g. link new ideas to weak topics): " + bits.join(" ") : "";
+  } catch (e) { return ""; }
+}
+// Remember the last thing the student was doing, for "Continue where you left off"
+function setLast(hash, label, icon) { Store.set("last", { hash, label: String(label).slice(0, 60), icon: icon || "▶", time: Date.now() }); }
+function timeAgo(t) {
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + " min ago";
+  const h = Math.round(m / 60);
+  if (h < 24) return h + (h === 1 ? " hour ago" : " hours ago");
+  const d = Math.round(h / 24);
+  return d + (d === 1 ? " day ago" : " days ago");
+}
+
+// ---------- Wayfinder slogans, floating lines and study tips ----------
+const SLOGANS = [
+  "Find your way to every answer. 🧭",
+  "Don't just get answers. Find your way.",
+  "Lost in a chapter? Let's find the way.",
+  "Learn it. Practise it. Own it.",
+  "Curiosity is your compass.",
+  "Every doubt is a door. Let's open it.",
+  "Your map to better marks. 🗺️"
+];
+const FLOATERS = [
+  "Keep going ✨", "You've got this 💪", "Curiosity is your compass 🧭", "One step at a time", "Mistakes = lessons",
+  "Small steps, big wins", "Stay curious 🔭", "Practice makes progress", "Focus. Learn. Grow. 🌱", "Every doubt is a door 🚪",
+  "Think, don't copy 💡", "Progress > perfection", "Believe in your brain 🧠", "Today's effort, tomorrow's marks ⭐", "Find your way 🧭"
+];
+const STUDY_TIPS = [
+  "Testing yourself helps you remember more than re-reading.",
+  "Spread revision over a few days instead of cramming in one night.",
+  "Explain the topic out loud, as if you're teaching a friend.",
+  "Mix different types of questions when you practise.",
+  "Sleep helps your brain store what you learned today.",
+  "After about 25 minutes of focus, take a 5-minute break.",
+  "Turn each heading into a question, then try to answer it.",
+  "Write your mistakes down: they show you exactly what to fix."
+];
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function tipOfDay() { const d = new Date(); return STUDY_TIPS[(d.getDate() * 3 + d.getMonth()) % STUDY_TIPS.length]; }
+// Faint motivating lines that drift up behind the app
+function startFloaters() {
+  const box = document.getElementById("floaters");
+  if (!box) return;
+  box.innerHTML = "";
+  if (getProfile().lite || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+  for (let i = 0; i < 6; i++) {
+    const span = document.createElement("span");
+    const reset = () => {
+      span.textContent = pick(FLOATERS);
+      span.style.left = (4 + Math.random() * 62) + "%";
+      span.style.fontSize = (13 + Math.random() * 7) + "px";
+    };
+    reset();
+    span.style.animationDuration = (24 + Math.random() * 16) + "s";
+    span.style.animationDelay = (-Math.random() * 36) + "s";
+    span.addEventListener("animationiteration", reset);
+    box.appendChild(span);
+  }
 }
 
 // ---------- Motivation ----------

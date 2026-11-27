@@ -9,19 +9,19 @@ function startOnboarding() {
   <div class="app col" style="gap:18px; padding-top:40px">
     <div id="slides" class="glass card" style="padding:28px 20px">
       <div class="slide on">
-        <div style="font-size:64px">🤖</div>
-        <h1>Meet your AI tutor</h1>
-        <p class="muted">Ask any doubt, any time. It explains step by step, gives hints first, and talks in your language.</p>
+        <img src="icons/logo.png" alt="Wayfinder logo" class="ob-logo">
+        <h1>Meet Wayfinder</h1>
+        <p class="muted">Your AI guide for every subject. It doesn't just give answers: it asks, hints and guides you until you truly understand.</p>
       </div>
       <div class="slide">
         <div style="font-size:64px">📸</div>
-        <h1>Snap, practise, remember</h1>
+        <h1>Snap. Practise. Remember.</h1>
         <p class="muted">Photo of your notes? It explains them. Quizzes, flashcards, mock exams and viva practice, all made by AI.</p>
       </div>
       <div class="slide">
         <div style="font-size:64px">📊</div>
-        <h1>Know where to improve</h1>
-        <p class="muted">It tracks every score, finds your weak topics, plans your revision and keeps you motivated with XP and streaks.</p>
+        <h1>Always know your next step</h1>
+        <p class="muted">It learns from every mistake, finds your weak topics, plans your day and keeps you motivated. Let's find your way!</p>
       </div>
       <div class="dots" style="margin-top:18px"><i class="on"></i><i></i><i></i></div>
     </div>

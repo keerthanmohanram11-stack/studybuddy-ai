@@ -1,7 +1,7 @@
 // ================= Learn tab: AI Tutor, Snap & Learn, Ask my PDF, Mind map, Key points, Listen, Saved =================
 view("learn", {
   html: () => `
-    <div><h1>📚 Learn</h1><p class="muted">Understand anything, your way.</p></div>
+    <div><h1>📚 Learn</h1><p class="muted tagline" data-tag="learn">Every question is a path. Let's walk it together.</p></div>
     <a class="glass card row" href="#tutor" style="text-decoration:none;color:var(--text)">
       <div style="font-size:40px">🤖</div>
       <div class="grow"><h3>AI Tutor</h3><p class="muted small">Socratic teaching · hints first · voice · web sources</p></div><span class="muted">›</span>
@@ -40,6 +40,7 @@ view("tutor", {
       <button class="pill" data-q="Give me one real-life example of that.">🌍 Example</button>
       <button class="pill" data-q="Now show me the full answer step by step.">✅ Full answer</button>
       <button class="pill" id="tQuiz">📝 Quiz me</button>
+      <button class="pill" id="tNotes">🗒️ Make notes</button>
       <button class="pill" id="tNew">🗑️ New chat</button>
     </div>
     <div class="inputbar glass">
@@ -100,7 +101,7 @@ view("tutor", {
     }
     function renderAll() {
       chat.innerHTML = "";
-      const hi = bubble({ role: "ai", text: "Hi " + (getProfile().name || "") + "! 👋 Ask me anything you're studying. I'll guide you step by step." });
+      const hi = bubble({ role: "ai", text: "Hi " + (getProfile().name || "") + "! 👋 I'm **Wayfinder**, your study guide. I won't just tell you the answer, I'll help you find it. What are we exploring today?" });
       hi.querySelector(".acts").remove(); hi.querySelector(".ai-label").remove();
       history.forEach(bubble);
     }
@@ -111,7 +112,13 @@ view("tutor", {
       if (!q || busy) return;
       busy = true;
       input.value = "";
+      // Did the student ask this before, or say they're confused? Then explain it a NEW way.
+      const words = t => new Set(String(t).toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 2));
+      const sim = (a, b) => { const A = words(a), B = words(b); if (!A.size || !B.size) return 0; let n = 0; A.forEach(w => { if (B.has(w)) n++; }); return n / Math.max(A.size, B.size); };
+      const repeated = !isQuick && history.some(m => m.role === "you" && sim(m.text, q) >= 0.6);
+      const confused = /\b(don'?t|didn'?t|do not|not) (get|understand)|confus|still (stuck|lost)|what\?+$|huh\b/i.test(q);
       if (!isQuick) lastQuestion = q;
+      setLast("tutor", "AI Tutor: " + (lastQuestion || q), "🤖");
       history.push({ role: "you", text: q });
       bubble({ role: "you", text: q });
       const wait = bubble({ role: "ai", text: "" });
@@ -129,7 +136,9 @@ view("tutor", {
         "💡 Hints first": "If the student asks you to solve a homework or exercise problem, first give a helpful hint and a guiding question instead of the final answer. Give the full worked answer only if they ask for it.",
         "✅ Direct answer": "Give a clear, complete explanation straight away."
       };
-      const hint = MODE_RULES[getMode()] || "";
+      let hint = MODE_RULES[getMode()] || "";
+      if (repeated || confused) hint += " IMPORTANT: the student " + (repeated ? "asked this before" : "says they don't understand") +
+        ". Do NOT repeat your earlier explanation. Use a completely different approach: a new everyday analogy, simpler words, or a tiny worked example. Then check understanding with one easy question.";
       try {
         const out = await ai(context + "\nConversation so far:\n" + convo + "\n\nReply to the student's last message.", { search: $("#tSearch", el).checked, extra: hint, check: q });
         const msg = { role: "ai", text: out.reply, sources: out.sources || [], q: lastQuestion };
@@ -165,6 +174,21 @@ view("tutor", {
       if (!history.length) { toast("Ask a question first 🙂"); return; }
       send(b.dataset.q, true);
     }));
+    $("#tNotes", el).addEventListener("click", async (e) => {
+      const lastAI = history.filter(m => m.role === "ai").pop();
+      if (!lastAI) { toast("Ask a question first 🙂"); return; }
+      e.target.disabled = true; e.target.textContent = "⏳ Making notes…";
+      try {
+        const subj = $("#tSubject", el).value;
+        const text = await aiText("Turn this explanation into short revision notes: a few headings and bullet points with key terms in bold. Add nothing new.\n\n" + lastAI.text.slice(0, 4000));
+        const notes = Store.get("notes", []);
+        notes.unshift({ id: Date.now(), title: String(lastAI.q || "Tutor notes").slice(0, 60), subject: subj === "Any subject" ? "Other" : subj, text, date: dayKey() });
+        Store.set("notes", notes);
+        addXP(5, "notes");
+        toast("🗒️ Saved to My notes");
+      } catch (err) { toast("⚠️ " + err.message); }
+      e.target.disabled = false; e.target.textContent = "🗒️ Make notes";
+    });
     $("#tQuiz", el).addEventListener("click", () => {
       if (!lastQuestion && !history.length) { toast("Ask a question first, then I'll quiz you"); return; }
       const topic = lastQuestion || (history.filter(m => m.role === "you").pop() || {}).text;
@@ -197,6 +221,7 @@ view("snap", {
       <img id="sPreview" alt="Your photo" class="hidden" style="max-width:100%; max-height:280px; border-radius:16px">
     </label>
     <input type="file" id="sPhoto" accept="image/*" class="hidden">
+    <div class="row between"><span class="label" style="margin:0">Explain at level</span><div class="pills" id="sLevel">${pillsHTML(["Easy", "Medium", "Advanced"])}</div></div>
     <div class="grid2">
       <button class="btn" data-m="hint">🧩 Help me solve</button>
       <button class="btn" data-m="explain">💡 Explain it</button>
@@ -208,8 +233,11 @@ view("snap", {
     <div id="sOut" class="glass card answer hidden"></div>
   `,
   init(el) {
-    let photo = null;
+    let photo = null, lastReply = "";
     const out = $("#sOut", el);
+    const getLevel = wireChoices($("#sLevel", el), "Medium", false);
+    const LEVEL_RULE = { Easy: " Explain at an EASY level: very simple words, short sentences, an everyday example.", Medium: " Explain at a normal level for my class.", Advanced: " Explain at an ADVANCED level: more detail, correct technical terms, and why each step works." };
+    const MULTI = " If the photo contains several different questions, list them as Q1, Q2 and so on and handle each one separately.";
     const PROMPTS = {
       hint: "This is a photo of a question or problem a student is stuck on. Do NOT give the final answer. Say in one line what the question is asking, then give the first helpful hint and one guiding question. Keep it under 80 words.",
       solve: "This is a photo of a question or problem. Now show the full solution step by step, explaining why each step works, and give the final answer clearly.",
@@ -222,12 +250,25 @@ view("snap", {
     function showReply(mode, label, reply) {
       show(fmt(reply) +
         (mode === "hint" ? `<p class="muted small" style="margin-top:10px">Try it yourself first. Still stuck?</p><button class="btn full" id="sSolve">✅ Show full solution</button>` : "") +
-        `<div class="row" style="margin-top:12px"><button class="btn sm ghost" id="sSave">🔖 Save</button><button class="btn sm ghost" id="sListen">🔊 Listen</button></div>`);
+        `<div class="row" style="margin-top:12px"><button class="btn sm ghost" id="sSave">🔖 Save</button><button class="btn sm ghost" id="sListen">🔊 Listen</button></div>` +
+        `<div class="row" style="margin-top:12px"><input type="text" id="sFollow" placeholder="Ask a follow-up about this photo…"><button class="btn sm" id="sAsk">Ask</button></div>`);
+      lastReply = reply;
+      const follow = async () => {
+        const fq = $("#sFollow", el).value.trim();
+        if (!fq) return;
+        show(LOADING);
+        try {
+          showReply("follow", "Follow-up: " + fq, await aiText("Earlier you told the student this about the photo:\n" + lastReply.slice(0, 3000) +
+            "\n\nThe student now asks: " + fq + "\nAnswer clearly." + LEVEL_RULE[getLevel()], { image: { mimeType: photo.mimeType, data: photo.data } }));
+        } catch (err) { show("⚠️ " + esc(err.message)); }
+      };
+      $("#sAsk", el).onclick = follow;
+      $("#sFollow", el).addEventListener("keydown", e => { if (e.key === "Enter") follow(); });
       $("#sSave", el).onclick = () => saveItem("Snap: " + label, reply, "Snap");
       $("#sListen", el).onclick = () => speak(reply);
       if (mode === "hint") $("#sSolve", el).onclick = async () => {
         show(LOADING);
-        try { showReply("solve", "Full solution", await aiText(PROMPTS.solve, { image: { mimeType: photo.mimeType, data: photo.data } })); }
+        try { showReply("solve", "Full solution", await aiText(PROMPTS.solve + MULTI + LEVEL_RULE[getLevel()], { image: { mimeType: photo.mimeType, data: photo.data } })); }
         catch (err) { show("⚠️ " + esc(err.message)); }
       };
     }
@@ -245,7 +286,8 @@ view("snap", {
       if (!photo) { show("👆 Choose a photo first."); return; }
       show(LOADING);
       try {
-        const reply = await aiText(PROMPTS[b.dataset.m], { image: { mimeType: photo.mimeType, data: photo.data } });
+        const reply = await aiText(PROMPTS[b.dataset.m] + MULTI + LEVEL_RULE[getLevel()], { image: { mimeType: photo.mimeType, data: photo.data } });
+        setLast("snap", "Snap & Learn", "📸");
         showReply(b.dataset.m, b.textContent.trim(), reply);
         addXP(10, "snaps");
       } catch (err) { show("⚠️ " + esc(err.message)); }
@@ -487,6 +529,7 @@ view("notes", {
         <div class="pills" style="margin-top:10px">
           <button class="pill" data-act="organise">✨ Organise</button>
           <button class="pill" data-act="summary">📝 Summary</button>
+          <button class="pill" data-act="formulas">🧮 Formulas</button>
           <button class="pill" data-act="cards">🃏 Flashcards</button>
           <button class="pill" data-act="quiz">📝 Quiz me</button>
           <button class="pill" data-act="listen">🔊 Listen</button>
@@ -516,6 +559,9 @@ view("notes", {
           const [yes, no] = $$("button", out);
           yes.onclick = () => { n.text = t; n.date = dayKey(); Store.set("notes", notes); toast("✨ Note organised"); this.paint(el); };
           no.onclick = () => { out.innerHTML = ""; };
+        } else if (act === "formulas") {
+          const t = await aiText("From these notes, list every formula, definition and must-remember fact as a short cheat sheet. If there are no formulas, list the key definitions. Notes:\n\n" + n.text.slice(0, 6000));
+          out.innerHTML = fmt(t);
         } else {
           const t = await aiText("Summarise these notes in 5 short bullet points a student can revise in one minute:\n\n" + n.text.slice(0, 6000));
           out.innerHTML = fmt(t);

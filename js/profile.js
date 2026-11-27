@@ -8,7 +8,7 @@ view("profile", {
     <div class="grid2">
       <a class="glass tile" href="#planner"><span class="ico">📅</span><b>Exam planner</b><span>AI day-by-day plan</span></a>
       <a class="glass tile" href="#homework"><span class="ico">📌</span><b>Homework</b><span>Due dates</span></a>
-      <a class="glass tile" href="#focus"><span class="ico">🌳</span><b>Focus mode</b><span>Grow a tree · +20 XP</span></a>
+      <a class="glass tile" href="#focus"><span class="ico">🌳</span><b>Focus mode</b><span>Custom timer · grow a tree</span></a>
       <a class="glass tile" href="#notes"><span class="ico">🗂️</span><b>My notes</b><span>Notes &amp; saved</span></a>
     </div>
     <a class="glass item" href="#report" style="text-decoration:none;color:var(--text)"><span>📤</span><span class="grow">Progress report for parents / teachers</span><span class="muted">›</span></a>
@@ -142,7 +142,7 @@ function focusMinutesWeek() { const f = focusStats(); let m = 0; for (let k = 0;
 view("focus", {
   tab: "profile",
   html: () => `
-    ${head("🌳 Focus mode", "Stay in the app and your tree grows")}
+    ${head("🌳 Focus mode", "Stay on the path. Your tree grows while you focus.")}
     <div class="glass card col center" style="align-items:center;padding:22px">
       <div class="ring">
         <svg width="220" height="220"><circle cx="110" cy="110" r="96" fill="none" stroke="var(--border)" stroke-width="12"/>
@@ -150,7 +150,15 @@ view("focus", {
         <div class="lbl"><div class="plant" id="fcPlant">🌱</div><div class="timerbig" id="fcTime">25:00</div><span class="muted small" id="fcMode">Ready to focus</span></div>
       </div>
       <p class="quote" id="fcQuote"></p>
-      <div class="pills" id="fcLen">${pillsHTML(["15 min", "25 min", "45 min"])}</div>
+      <div class="pills" id="fcLen">${pillsHTML(["15 min", "25 min", "45 min", "60 min"])}</div>
+      <div class="grid2" style="width:100%">
+        <div class="stepper"><span class="small muted">Focus</span>
+          <div class="row"><button class="icon-btn" data-step="f-" aria-label="Less focus time">−</button><input type="number" id="fcMins" min="5" max="180" inputmode="numeric" aria-label="Focus minutes"><button class="icon-btn" data-step="f+" aria-label="More focus time">+</button></div>
+          <span class="small muted">minutes</span></div>
+        <div class="stepper"><span class="small muted">Break</span>
+          <div class="row"><button class="icon-btn" data-step="b-" aria-label="Shorter break">−</button><input type="number" id="fcBreak" min="1" max="30" inputmode="numeric" aria-label="Break minutes"><button class="icon-btn" data-step="b+" aria-label="Longer break">+</button></div>
+          <span class="small muted">minutes</span></div>
+      </div>
       <label class="switch" style="width:100%"><span>🔒 Focus lock (full screen + leave alert)</span><input type="checkbox" id="fcLock"><span class="track"></span></label>
       <div class="row"><button class="btn" id="fcStart">▶ Start focus</button><button class="btn ghost" id="fcReset">Give up</button></div>
     </div>
@@ -173,7 +181,10 @@ view("focus", {
     <div id="fcAway" class="overlay hidden" style="z-index:60"></div>
   `,
   init(el) {
-    let total = 25 * 60, left = total, endAt = 0, timer = null, resting = false, running = false;
+    // Custom timer: focus 5-180 min, break 1-30 min, remembered for next time
+    const prof = getProfile();
+    let focusMins = Math.min(180, Math.max(5, prof.focusMins || 25)), breakMins = Math.min(30, Math.max(1, prof.breakMins || 5));
+    let total = focusMins * 60, left = total, endAt = 0, timer = null, resting = false, running = false;
     let awayAt = 0, leftCount = 0, quoteTimer = null, wake = null;
     const ring = $("#fcRing", el);
     $("#fcLock", el).checked = getProfile().focusLock !== false;
@@ -224,16 +235,18 @@ view("focus", {
           if (leftCount === 0) { f.clean++; f.best = Math.max(f.best, f.clean); }
           Store.set("focusStats", f);
           stop();
-          addXP(20, "focus");
+          const xp = Math.min(50, Math.max(10, Math.round(mins * 0.8)));
+          addXP(xp, "focus");
           confetti();
-          toast(leftCount === 0 ? "🌳 Your tree is fully grown! +20 XP. Perfect focus!" : "🌳 Session done! +20 XP. Try not to leave next time 😉");
-          speak("Great job! Take a five minute break.");
-          resting = true; total = left = 5 * 60; endAt = Date.now() + total * 1000;
+          toast(leftCount === 0 ? "🌳 Your tree is fully grown! +" + xp + " XP. Perfect focus!" : "🌳 Session done! +" + xp + " XP. Try not to leave next time 😉");
+          speak("Great job! Take a " + breakMins + " minute break.");
+          resting = true; total = left = breakMins * 60; endAt = Date.now() + total * 1000;
+          $("#fcQuote", el).textContent = "💡 Break tip: " + pick(STUDY_TIPS);
           running = true; timer = setInterval(tick, 500);
           $("#fcStart", el).textContent = "⏸ Pause";
           paintStats();
         } else {
-          stop(); resting = false; total = left = parseInt(getLen()) * 60;
+          stop(); resting = false; total = left = focusMins * 60;
           toast("⏰ Break over! Ready for another round? 💪");
         }
       }
@@ -249,12 +262,29 @@ view("focus", {
       if (locked() && !resting) lockOn();
       paint();
     };
-    const getLen = wireChoices($("#fcLen", el), "25 min", false, v => { stop(); resting = false; total = left = parseInt(v) * 60; paint(); });
+    const saveTimes = () => { const q = getProfile(); q.focusMins = focusMins; q.breakMins = breakMins; saveProfile(q); };
+    const paintPills = () => $$("#fcLen [data-v]", el).forEach(b => b.classList.toggle("on", parseInt(b.dataset.v) === focusMins));
+    const setFocus = (m) => {
+      focusMins = Math.min(180, Math.max(5, Math.round(m) || 25));
+      $("#fcMins", el).value = focusMins;
+      paintPills(); saveTimes();
+      if (!running) { resting = false; total = left = focusMins * 60; paint(); }
+    };
+    const setBreak = (m) => { breakMins = Math.min(30, Math.max(1, Math.round(m) || 5)); $("#fcBreak", el).value = breakMins; saveTimes(); };
+    wireChoices($("#fcLen", el), focusMins + " min", false, v => setFocus(parseInt(v)));
+    $("#fcMins", el).value = focusMins; $("#fcBreak", el).value = breakMins; paintPills();
+    $("#fcMins", el).addEventListener("change", e => setFocus(+e.target.value));
+    $("#fcBreak", el).addEventListener("change", e => setBreak(+e.target.value));
+    $$("[data-step]", el).forEach(b => b.addEventListener("click", () => {
+      const k = b.dataset.step;
+      if (k === "f+") setFocus(focusMins + 5); if (k === "f-") setFocus(focusMins - 5);
+      if (k === "b+") setBreak(breakMins + 1); if (k === "b-") setBreak(breakMins - 1);
+    }));
 
     $("#fcStart", el).addEventListener("click", () => { if (running) { stop(); left = Math.max(1, left); paint(); } else start(); });
     $("#fcReset", el).addEventListener("click", () => {
       if (running && !resting) toast("🥀 You gave up this time. Next round you've got this!");
-      stop(); resting = false; total = left = parseInt(getLen()) * 60; paint();
+      stop(); resting = false; total = left = focusMins * 60; paint();
     });
 
     // Leave detection: did they switch to another app?
@@ -269,7 +299,7 @@ view("focus", {
       const f = focusStats(); f.left++; f.clean = 0; Store.set("focusStats", f);
       paintStats();
       if (secs > 15) {
-        stop(); resting = false; total = left = parseInt(getLen()) * 60; paint();
+        stop(); resting = false; total = left = focusMins * 60; paint();
         away.innerHTML = `<div class="app col center" style="align-items:center;gap:14px;padding-top:120px">
           <div style="font-size:80px">🥀</div><h2>Your tree wilted</h2>
           <p class="muted">You left the app for ${secs} seconds. Other apps can wait. Your goals can't!</p>
@@ -286,7 +316,7 @@ view("focus", {
     window.addEventListener("hashchange", () => {
       if (running && !resting && locked() && !location.hash.startsWith("#focus")) {
         if (!confirm("Leave focus mode? Your tree will stop growing.")) { location.hash = "focus"; return; }
-        stop(); resting = false; total = left = parseInt(getLen()) * 60; paint();
+        stop(); resting = false; total = left = focusMins * 60; paint();
       }
     });
     $("#fcQuote", el).textContent = quoteOfDay();
@@ -306,7 +336,7 @@ function buildReport() {
   const subs = {};
   list.forEach(t => { const raw = getTopics()[t.name]; subs[t.subject] = subs[t.subject] || [0, 0]; subs[t.subject][0] += raw.correct; subs[t.subject][1] += raw.total; });
   const lines = [
-    "📊 StudyBuddy AI report",
+    "🧭 Wayfinder progress report",
     "👤 " + (p.name || "Student") + " · " + p.grade + " · " + p.board,
     "📅 Week ending " + new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
     "",
@@ -353,7 +383,7 @@ view("report", {
     };
     $("#rpWA", el).onclick = () => window.open("https://wa.me/?text=" + encodeURIComponent(text()), "_blank");
     $("#rpShare", el).onclick = async () => {
-      if (navigator.share) { try { await navigator.share({ title: "StudyBuddy report", text: text() }); } catch (e) {} }
+      if (navigator.share) { try { await navigator.share({ title: "Wayfinder report", text: text() }); } catch (e) {} }
       else window.open("https://wa.me/?text=" + encodeURIComponent(text()), "_blank");
     };
     $("#rpCopy", el).onclick = async () => {
@@ -470,14 +500,14 @@ view("about", {
       <h3>🔒 Your privacy</h3>
       <p class="muted">Your name, scores and notes are saved only on this phone. No ads, no tracking, no account needed.</p>
       <h3>🤖 About the AI</h3>
-      <p class="muted">StudyBuddy uses 3 AI providers: Groq, Google Gemini and OpenRouter. AI can make mistakes, so always check important facts with your textbook or teacher. Tap 👎 on any answer that looks wrong.</p>
+      <p class="muted">Wayfinder uses 3 AI providers: Groq, Google Gemini and OpenRouter. AI can make mistakes, so always check important facts with your textbook or teacher. Tap 👎 on any answer that looks wrong.</p>
       <h3>📚 Learning, not copying</h3>
       <p class="muted">"Hints first" mode guides you to the answer instead of just giving it, so you actually learn.</p>
       <h3>🧯 Safety filter</h3>
       <p class="muted">The AI is told it is talking to a child and refuses unsafe topics. If a student types something worrying, the app shows a kind message and a helpline instead.</p>
       <h3>👀 Healthy studying</h3>
       <p class="muted">You'll get a gentle break reminder every 25 minutes.</p>
-      <p class="muted small">StudyBuddy AI · made by Keerthan and team</p>
+      <p class="muted small">🧭 Wayfinder · <i>Find your way to every answer</i> · made by Keerthan and team</p>
     </div>
   `
 });

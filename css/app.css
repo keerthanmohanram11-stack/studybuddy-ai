@@ -1,4 +1,4 @@
-/* ================= StudyBuddy AI: styles ================= */
+/* ================= Wayfinder: styles ================= */
 /* Theme colours (--base1..3, --glow1..3, --holo, --accent) are set by js/core.js */
 
 :root {
@@ -233,11 +233,12 @@ body.no-nav .nav { display: none; }
 .option .letter { width: 30px; height: 30px; flex-shrink: 0; border-radius: 10px; background: var(--tint); color: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 800; }
 .option.correct { border: 2px solid var(--good); background: rgba(47, 158, 122, 0.22); }
 .option.wrong { border: 2px solid var(--bad); background: rgba(224, 86, 110, 0.2); }
-.flip { perspective: 1000px; height: 250px; cursor: pointer; }
-.flip-inner { position: relative; width: 100%; height: 100%; transition: transform 0.55s; transform-style: preserve-3d; }
-.flip.on .flip-inner { transform: rotateY(180deg); }
-.face { position: absolute; inset: 0; padding: 22px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 1.15em; font-weight: 700; backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: auto; }
-.face.back { transform: rotateY(180deg); font-size: 1em; font-weight: 600; }
+.flip { height: 250px; cursor: pointer; }
+.flip-inner { position: relative; width: 100%; height: 100%; }
+.face { position: absolute; inset: 0; padding: 22px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 1.15em; font-weight: 700; overflow: auto; transition: opacity 0.35s, transform 0.35s; }
+.face.rear { opacity: 0; transform: scale(0.94) rotateX(8deg); font-size: 1em; font-weight: 600; pointer-events: none; }
+.flip.on .face:not(.rear) { opacity: 0; transform: scale(0.94); pointer-events: none; }
+.flip.on .face.rear { opacity: 1; transform: none; pointer-events: auto; }
 .timerbig { font-size: calc(44px * var(--fs)); font-weight: 800; font-variant-numeric: tabular-nums; }
 
 /* ---------- Progress ---------- */
@@ -275,7 +276,7 @@ body.no-nav .nav { display: none; }
 @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
 .overlay { position: fixed; inset: 0; z-index: 50; overflow-y: auto; }
 .overlay .app { padding-bottom: 40px; }
-#splash { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; transition: opacity 0.4s; }
+#splash { background: linear-gradient(170deg, var(--base1), var(--base2) 55%, var(--base3)); z-index: 80; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; transition: opacity 0.4s; }
 #splash.gone { opacity: 0; pointer-events: none; }
 .logo { width: 92px; height: 92px; border-radius: 28px; background: var(--holo); display: flex; align-items: center; justify-content: center; font-size: 46px; animation: glow 1.6s ease-in-out infinite alternate; }
 @keyframes glow { from { box-shadow: 0 0 0 0 rgba(205, 184, 255, 0.0); transform: scale(0.97); } to { box-shadow: 0 0 40px 6px rgba(205, 184, 255, 0.45); transform: scale(1); } }
@@ -304,3 +305,57 @@ body.focusing .plant { animation: sway 3s ease-in-out infinite; }
 .bar.goal > div { background: linear-gradient(90deg, #7BE495, #FFD67A); }
 pre.report { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: calc(14px * var(--fs)); line-height: 1.6; margin: 0; color: var(--text); }
 #fcAway { background: var(--base2); }
+.stepper { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.stepper .row { gap: 6px; }
+.stepper input { width: 64px; text-align: center; font-size: 20px; font-weight: 800; padding: 8px 4px; }
+.stepper .icon-btn { width: 40px; height: 40px; font-size: 20px; }
+.mistake { padding: 10px 0; border-bottom: 1px solid var(--border); line-height: 1.5; }
+.mistake:last-of-type { border-bottom: none; }
+.mistake .bad { color: var(--bad); }
+.mistake .good { color: var(--good, #7BE495); }
+.continue { border: 1px solid var(--accent); }
+.plan-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.plan-item:last-child { border-bottom: none; }
+.plan-item a { color: var(--text); text-decoration: none; flex: 1; }
+.mastery { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.mchip { padding: 8px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; text-decoration: none; color: var(--text); border: 1px solid var(--border); }
+.mchip.m { background: rgba(123, 228, 149, .18); border-color: rgba(123, 228, 149, .5); }
+.mchip.l { background: rgba(255, 214, 122, .16); border-color: rgba(255, 214, 122, .5); }
+.mchip.r { background: rgba(255, 140, 160, .16); border-color: rgba(255, 140, 160, .5); }
+
+/* ---------- Polish: easier to read and tap on phones ---------- */
+body { font-size: calc(16px * var(--fs)); }
+.small { font-size: 0.85em; }
+:root { --grid: rgba(255, 255, 255, 0.022); }
+[data-mode="light"] { --grid: rgba(255, 255, 255, 0.18); }
+.pill { min-height: 42px; }
+.btn.sm { min-height: 40px; }
+.check { min-width: 32px; min-height: 32px; }
+.app { padding-top: max(16px, env(safe-area-inset-top)); }
+.nav a.on { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25), 0 6px 18px rgba(205, 184, 255, 0.35); }
+@media (min-width: 700px) { .grid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; } .grid2 { gap: 16px; } }
+
+/* ---------- Wayfinder brand: slogans and floating lines ---------- */
+#floaters { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+#floaters span { position: absolute; bottom: -40px; white-space: nowrap; font-weight: 800; color: var(--text); opacity: 0; animation: floatUp linear infinite; }
+@keyframes floatUp {
+  0% { transform: translateY(0) rotate(-4deg); opacity: 0; }
+  12% { opacity: 0.10; }
+  88% { opacity: 0.10; }
+  100% { transform: translateY(-112vh) rotate(4deg); opacity: 0; }
+}
+body.lite #floaters, body.focusing #floaters { display: none; }
+.tagline-rot { margin-top: 4px; font-size: 0.88em; font-weight: 600; background: var(--holo); -webkit-background-clip: text; background-clip: text; color: transparent; transition: opacity 0.4s; min-height: 1.4em; }
+.tagline-rot.fade { opacity: 0; }
+.tagline { font-style: italic; }
+.brand { font-size: 34px; font-weight: 900; letter-spacing: -0.02em; background: var(--holo); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.slogan { font-style: italic; letter-spacing: 0.02em; }
+.compass-spin { animation: compass 6s ease-in-out infinite; display: inline-block; }
+@keyframes compass { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(14deg); } }
+body.lite .compass-spin { animation: none; }
+@media (prefers-reduced-motion: reduce) { #floaters { display: none; } .compass-spin { animation: none; } }
+.logo.logo-img { background: none; width: 140px; height: 140px; border-radius: 50%; animation: logoGlow 2s ease-in-out infinite alternate; }
+.logo.logo-img img { width: 100%; height: 100%; border-radius: 50%; }
+@keyframes logoGlow { from { box-shadow: 0 0 0 0 rgba(120, 100, 255, 0); transform: scale(0.96); } to { box-shadow: 0 0 50px 8px rgba(120, 100, 255, 0.45); transform: scale(1); } }
+.ob-logo { width: 96px; height: 96px; border-radius: 50%; box-shadow: 0 0 30px rgba(120, 100, 255, 0.45); }
+.hero-logo { width: 78px; height: 78px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 24px rgba(120, 100, 255, 0.4); }

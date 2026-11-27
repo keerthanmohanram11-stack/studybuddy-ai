@@ -1,7 +1,7 @@
 // ================= Progress tab: stats, graphs, weak/strong topics, revision, AI coach, badges =================
 view("progress", {
   html: () => `
-    <div><h1>📊 Progress</h1><p class="muted">See how you're doing and where to improve.</p></div>
+    <div><h1>📊 Progress</h1><p class="muted tagline" data-tag="progress">See how far you've come, and where to go next.</p></div>
     <div class="grid2">
       <div class="glass stat"><span class="muted small">Level</span><b id="pgLevel">1</b></div>
       <div class="glass stat"><span class="muted small">Total XP</span><b id="pgXP">0</b></div>
@@ -12,8 +12,15 @@ view("progress", {
     <div class="glass card"><h3>Study activity (last 7 days)</h3><div style="position:relative;height:190px"><canvas id="pgAct"></canvas></div></div>
     <div class="glass card col">
       <h3>🔁 Revise today</h3><div class="pills" id="pgDue"></div>
-      <h3>🎯 Work on these</h3><div class="pills" id="pgWeak"></div>
-      <h3>💪 You're strong in</h3><div class="pills" id="pgStrong"></div>
+    </div>
+    <div class="glass card col">
+      <h3>🗺️ Mastery map</h3>
+      <p class="muted small">✅ Mastered (80%+) · 📘 Learning (60–79%) · 🔁 Needs revision (under 60%). Tap a topic to practise it.</p>
+      <div id="pgMap" class="col"></div>
+    </div>
+    <div class="glass card col">
+      <h3>📕 Mistake book</h3>
+      <div id="pgMist"></div>
     </div>
     <div class="glass card col">
       <div class="row"><span class="dot"></span><h3>AI Study Coach</h3></div>
@@ -53,8 +60,27 @@ view("progress", {
         : `<span class="muted small">${empty}</span>`;
     };
     pills("#pgDue", revisionDue(), "Nothing due. Nice!");
-    pills("#pgWeak", weakTopics(), "No weak topics yet 🎉");
-    pills("#pgStrong", list.filter(t => t.score >= 60).sort((a, b) => b.score - a.score), "Take quizzes to find out.");
+    // Mastery map: every topic, grouped by subject
+    const bySubject = {};
+    list.forEach(t => { (bySubject[t.subject] = bySubject[t.subject] || []).push(t); });
+    const subjects = Object.keys(bySubject);
+    $("#pgMap", el).innerHTML = subjects.length ? subjects.map(sub => `<div><b class="small">${esc(sub)}</b><div class="mastery">${bySubject[sub].sort((a, b) => a.score - b.score).map(t => {
+      const c = t.score >= 80 ? "m" : t.score >= 60 ? "l" : "r", ico = t.score >= 80 ? "✅" : t.score >= 60 ? "📘" : "🔁";
+      return `<a class="mchip ${c}" href="#quiz?topic=${encodeURIComponent(t.name)}">${ico} ${esc(t.name)} · ${t.score}%</a>`;
+    }).join("")}</div></div>`).join("") : `<span class="muted small">Take a quiz or "Find my level" and your topics will appear here.</span>`;
+
+    // Mistake book
+    const mist = getMistakes();
+    $("#pgMist", el).innerHTML = mist.length
+      ? `<p class="muted small">${mist.length} mistake${mist.length === 1 ? "" : "s"} saved from your quizzes. The AI tutor remembers your recent ones.</p>` +
+        mist.slice(0, 3).map(m => `<div class="mistake small"><b>${esc(m.q)}</b><br><span class="good">✅ ${esc(m.correct)}</span> <span class="muted">· ${esc(m.topic)}</span></div>`).join("") +
+        `<button class="btn ghost full" id="pgMistCards" style="margin-top:10px">🃏 Turn my last ${Math.min(15, mist.length)} mistakes into flashcards</button>`
+      : `<span class="muted small">No mistakes yet. Wrong quiz answers are saved here so you can fix them.</span>`;
+    if (mist.length) $("#pgMistCards", el).onclick = () => {
+      addDeck("Mistake book", mist.slice(0, 15).map(m => ({ front: m.q, back: "✅ " + m.correct + (m.explanation ? ". " + m.explanation : "") })));
+      toast("🃏 Flashcards made from your mistakes");
+      go("cards");
+    };
 
     const earned = Store.get("badges", []);
     $("#pgBadges", el).innerHTML = BADGES.map(b => `<div class="glass badge ${earned.includes(b.id) ? "" : "locked"}"><span class="ico">${b.ico}</span><span>${esc(b.name)}</span></div>`).join("");

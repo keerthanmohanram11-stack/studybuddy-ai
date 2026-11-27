@@ -1,7 +1,7 @@
 {
-  "name": "StudyBuddy AI",
-  "short_name": "StudyBuddy",
-  "description": "Your AI study partner: doubts, quizzes, planner and progress tracking.",
+  "name": "Wayfinder: AI Study Guide",
+  "short_name": "Wayfinder",
+  "description": "Find your way to every answer. An AI tutor that guides you, quizzes you and shows you where to improve.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
@@ -13,6 +13,6 @@
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

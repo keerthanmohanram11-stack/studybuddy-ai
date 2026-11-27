@@ -1,7 +1,7 @@
 // ================= Practice tab: Quiz, Flashcards, Mock exam, Answer checker, Viva, Daily challenge, Diagnostic =================
 view("practice", {
   html: () => `
-    <div><h1>✏️ Practice</h1><p class="muted">Test yourself. The AI adapts to your level.</p></div>
+    <div><h1>✏️ Practice</h1><p class="muted tagline" data-tag="practice">Mistakes are signposts, not stop signs.</p></div>
     <a class="glass card row" href="#diagnostic" style="text-decoration:none;color:var(--text)">
       <div style="font-size:36px">🩺</div>
       <div class="grow"><h3>Find my level</h3><p class="muted small">A short test that finds your weak topics</p></div><span class="muted">›</span>
@@ -26,49 +26,106 @@ view("practice", {
 });
 
 // ---------- Shared quiz runner ----------
-function quizPrompt(topic, count, difficulty) {
-  return 'Make a ' + count + '-question multiple choice quiz on "' + topic + '" at ' + difficulty + ' difficulty for my class. ' +
-    'Return JSON exactly like: {"subject":"Maths","questions":[{"question":"...","options":["...","...","...","..."],"answer":0,"explanation":"..."}]}. ' +
-    '"subject" is one of: Maths, Science, English, Social Science, Hindi, Computers, Physics, Chemistry, Biology, Other. "answer" is the index (0-3) of the correct option. Keep explanations to 1-2 sentences.';
+function quizPrompt(topic, count, difficulty, adaptive) {
+  return 'Make a ' + count + '-question multiple choice quiz on "' + topic + '" ' +
+    (adaptive ? 'with a MIX of difficulty: about one third "easy", one third "medium" and one third "hard" (hard = application or real-life questions). ' : 'at ' + difficulty + ' difficulty ') +
+    'for my class. Return JSON exactly like: {"subject":"Maths","questions":[{"question":"...","options":["...","...","...","..."],"answer":0,"level":"medium","explanation":"..."}]}. ' +
+    '"subject" is one of: Maths, Science, English, Social Science, Hindi, Computers, Physics, Chemistry, Biology, Other. "answer" is the index (0-3) of the correct option. "level" is easy, medium or hard. Keep explanations to 1-2 sentences.';
 }
+const LEVELS = ["easy", "medium", "hard"];
+const LEVEL_TAG = { easy: "🟢 Easy", medium: "🟡 Medium", hard: "🔴 Hard" };
+
+// Runs a quiz. opts: topic, seconds (exam timer), review, counter, again, onFinish,
+// adaptive (pick harder/easier questions as you go), ask (how many to ask from the pool)
 function runQuiz(area, data, opts) {
-  const qs = (data.questions || []).filter(q => q && q.question && Array.isArray(q.options) && q.options.length >= 2);
-  if (!qs.length) { area.innerHTML = `<div class="glass card">⚠️ The AI didn't send questions. Please try again.</div>`; return; }
-  let i = 0, score = 0;
-  const answers = [];
-  let deadline = opts.seconds ? Date.now() + opts.seconds * 1000 : 0;
+  const pool = (data.questions || []).filter(q => q && q.question && Array.isArray(q.options) && q.options.length >= 2);
+  if (!pool.length) { area.innerHTML = `<div class="glass card">⚠️ The AI didn't send questions. Please try again.</div>`; return; }
+  pool.forEach(q => { q.level = LEVELS.includes(String(q.level).toLowerCase()) ? String(q.level).toLowerCase() : "medium"; q.answer = Number(q.answer) || 0; });
+  const total = Math.min(opts.ask || pool.length, pool.length);
+  const shown = [], answers = [];
+  let target = LEVELS.indexOf(difficultyFor(opts.topic)); if (target < 0) target = 1;
+  let score = 0, current = null, levelMsg = "";
+  const deadline = opts.seconds ? Date.now() + opts.seconds * 1000 : 0;
   let tick = null;
+
+  function pickNext() {
+    const unused = pool.filter(q => !shown.includes(q));
+    if (!opts.adaptive) return unused[0];
+    // choose the unused question closest to the level the student is ready for
+    unused.sort((a, b) => Math.abs(LEVELS.indexOf(a.level) - target) - Math.abs(LEVELS.indexOf(b.level) - target));
+    return unused[0];
+  }
 
   function finish() {
     clearInterval(tick);
-    const pct = Math.round(score / qs.length * 100);
-    saveResult(opts.topic, data.subject || "Other", score, qs.length);
+    const n = shown.length;
+    const pct = Math.round(score / n * 100);
+    saveResult(opts.topic, data.subject || "Other", score, n);
     addXP(score * 10, opts.counter || "quizzes");
     if (pct === 100) { const s = getStats(); s.counts.perfect = (s.counts.perfect || 0) + 1; Store.set("stats", s); checkBadges(); confetti(); }
     else if (pct >= 60) confetti();
+
+    const wrong = shown.map((q, k) => ({ q, k })).filter(x => answers[x.k] !== x.q.answer).map(x => ({
+      src: x.q, q: x.q.question, chosen: answers[x.k] == null ? "(no answer)" : x.q.options[answers[x.k]],
+      correct: x.q.options[x.q.answer], explanation: x.q.explanation || "", topic: opts.topic, subject: data.subject || "Other"
+    }));
+    addMistakes(wrong.map(w => ({ q: w.q, chosen: w.chosen, correct: w.correct, explanation: w.explanation, topic: w.topic, subject: w.subject })));
+
     area.innerHTML = `
       <div class="glass card col center" style="align-items:center">
         <div style="font-size:52px">${pct >= 80 ? "🏆" : pct >= 60 ? "🎉" : "💪"}</div>
-        <h2>You scored ${score} / ${qs.length}</h2>
+        <h2>You scored ${score} / ${n}</h2>
         <p class="muted">${pct >= 60 ? "Great job! +" + score * 10 + " XP" : "Keep going! This topic is now on your revision list."}</p>
-        <div class="row"><button class="btn" id="qzAgain">Try again</button><a class="btn ghost" href="#progress">See progress</a></div>
+        <div class="row"><button class="btn" id="qzAgain">New quiz</button><a class="btn ghost" href="#progress">See progress</a></div>
       </div>
-      ${opts.review ? `<div class="col">${qs.map((q, k) => `<div class="glass card small"><b>${k + 1}. ${esc(q.question)}</b><br>${answers[k] === q.answer ? "✅" : "❌"} Answer: ${esc(q.options[q.answer])}<br><span class="muted">${esc(q.explanation || "")}</span></div>`).join("")}</div>` : ""}`;
+      ${wrong.length ? `
+      <div class="glass card col" id="qzMist">
+        <h3>🧠 Learn from your mistakes</h3>
+        <p class="muted small">Saved to your mistake book. The AI tutor will remember them too.</p>
+        ${wrong.map((w, k) => `<div class="mistake"><b>${k + 1}. ${esc(w.q)}</b><br><span class="bad">❌ You: ${esc(w.chosen)}</span><br><span class="good">✅ Answer: ${esc(w.correct)}</span>${w.explanation ? `<br><span class="muted small">${esc(w.explanation)}</span>` : ""}</div>`).join("")}
+        <button class="btn full" id="qzExplain">💡 Explain my mistakes</button>
+        <div id="qzExplainOut" class="answer"></div>
+        <div class="grid2"><button class="btn ghost" id="qzRetry">🔁 Retry wrong ones</button><button class="btn ghost" id="qzCards">🃏 Make flashcards</button></div>
+      </div>` : `<div class="glass card center">🌟 No mistakes. Try a harder topic next!</div>`}
+      ${opts.review && wrong.length < n ? `<details class="glass card"><summary style="cursor:pointer"><b>See all answers</b></summary>${shown.map((q, k) => `<p class="small">${k + 1}. ${esc(q.question)}<br>${answers[k] === q.answer ? "✅" : "❌"} ${esc(q.options[q.answer])}</p>`).join("")}</details>` : ""}`;
     $("#qzAgain", area).onclick = opts.again;
-    if (opts.onFinish) opts.onFinish(score, qs.length);
+    if (wrong.length) {
+      $("#qzExplain", area).onclick = async (e) => {
+        e.target.disabled = true;
+        const out = $("#qzExplainOut", area);
+        out.innerHTML = LOADING;
+        try {
+          const list = wrong.map((w, k) => (k + 1) + ". Q: " + w.q + " | My answer: " + w.chosen + " | Correct: " + w.correct).join("\n");
+          out.innerHTML = fmt(await aiText("I got these questions wrong in a quiz on " + opts.topic + ":\n" + list +
+            "\n\nFor each one: name the concept I misunderstood, explain it simply in 2-3 sentences, and give one tip so I don't make that mistake again. Label them Q1, Q2 and so on."));
+          addXP(5, "mistakesFixed");
+        } catch (err) { out.innerHTML = "⚠️ " + esc(err.message); e.target.disabled = false; }
+      };
+      $("#qzRetry", area).onclick = () => runQuiz(area, { subject: data.subject, questions: wrong.map(w => w.src) }, { topic: opts.topic, again: opts.again });
+      $("#qzCards", area).onclick = (e) => {
+        addDeck("Mistakes: " + opts.topic, wrong.map(w => ({ front: w.q, back: "✅ " + w.correct + (w.explanation ? ". " + w.explanation : "") })));
+        toast("🃏 " + wrong.length + " flashcards made from your mistakes");
+        e.target.textContent = "Open flashcards →";
+        e.target.onclick = () => go("cards");
+      };
+    }
+    if (opts.onFinish) opts.onFinish(score, n);
   }
 
   function showQ() {
-    const q = qs[i];
+    current = pickNext();
+    shown.push(current);
+    const i = shown.length - 1;
     area.innerHTML = `
       <div class="glass card">
-        <div class="row between"><span class="muted small">${esc(opts.topic)}</span><span class="muted small">${opts.seconds ? '⏱ <b id="qzTime"></b> · ' : ""}${i + 1} / ${qs.length}</span></div>
-        <div class="bar" style="margin:10px 0 14px"><div style="width:${Math.round(i / qs.length * 100)}%"></div></div>
-        <h3>${esc(q.question)}</h3>
+        <div class="row between"><span class="muted small">${esc(opts.topic)}${opts.adaptive ? ' · <span class="tag">' + LEVEL_TAG[current.level] + "</span>" : ""}</span><span class="muted small">${opts.seconds ? '⏱ <b id="qzTime"></b> · ' : ""}${i + 1} / ${total}</span></div>
+        <div class="bar" style="margin:10px 0 14px"><div style="width:${Math.round(i / total * 100)}%"></div></div>
+        ${levelMsg ? `<p class="small" style="margin:0 0 8px;color:var(--accent)">${levelMsg}</p>` : ""}
+        <h3>${esc(current.question)}</h3>
         <div id="qzOpts"></div><div id="qzFb"></div>
       </div>`;
     const box = $("#qzOpts", area);
-    q.options.slice(0, 4).forEach((o, k) => {
+    current.options.slice(0, 4).forEach((o, k) => {
       const b = document.createElement("button");
       b.className = "option";
       b.innerHTML = `<span class="letter">${"ABCD"[k]}</span><span>${esc(o)}</span>`;
@@ -76,20 +133,25 @@ function runQuiz(area, data, opts) {
       box.appendChild(b);
     });
   }
-  function next() { i++; if (i < qs.length) showQ(); else finish(); }
+  function next() { if (shown.length < total) showQ(); else finish(); }
   function pick(k) {
-    const q = qs[i];
+    const q = current, i = shown.length - 1;
     answers[i] = k;
-    const right = k === Number(q.answer);
+    const right = k === q.answer;
     if (right) score++;
+    if (opts.adaptive) {
+      const before = target;
+      target = right ? Math.min(2, target + 1) : Math.max(0, target - 1);
+      levelMsg = target > before ? "⬆️ Nice! Next one is a bit harder." : target < before ? "⬇️ Let's try an easier one first." : "";
+    }
     if (opts.seconds) { next(); return; } // exam mode: no feedback until the end
     $$(".option", area).forEach((b, n) => {
       b.disabled = true;
-      if (n === Number(q.answer)) b.classList.add("correct");
+      if (n === q.answer) b.classList.add("correct");
       else if (n === k) b.classList.add("wrong");
     });
     $("#qzFb", area).innerHTML = `<p class="answer" style="margin:12px 0">${right ? "✅ Correct! +10 XP. " : "❌ Not quite. "}${esc(q.explanation || "")}</p>
-      <button class="btn full">${i < qs.length - 1 ? "Next →" : "See my score"}</button>`;
+      <button class="btn full">${shown.length < total ? "Next →" : "See my score"}</button>`;
     $("#qzFb button", area).onclick = next;
   }
   if (opts.seconds) {
@@ -97,7 +159,12 @@ function runQuiz(area, data, opts) {
       const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
       const t = $("#qzTime", area);
       if (t) t.textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
-      if (left <= 0) { toast("⏰ Time's up!"); finish(); }
+      if (left <= 0) {
+        toast("⏰ Time's up!");
+        // unanswered questions count as wrong
+        while (shown.length < total) shown.push(pickNext());
+        finish();
+      }
     }, 500);
   }
   showQ();
@@ -107,7 +174,7 @@ function runQuiz(area, data, opts) {
 view("quiz", {
   tab: "practice",
   html: () => `
-    ${head("📝 AI Quiz", "Questions get harder as you improve")}
+    ${head("📝 AI Quiz", "Gets harder when you're right, easier when you're stuck")}
     <div class="glass card col">
       <div class="field"><label for="qzTopic">Topic</label><input type="text" id="qzTopic" placeholder="e.g. Fractions, Photosynthesis, Tenses"></div>
       <div class="pills" id="qzCount">${pillsHTML(["5 questions", "10 questions"])}</div>
@@ -121,11 +188,12 @@ view("quiz", {
     const start = async () => {
       const topic = $("#qzTopic", el).value.trim();
       if (!topic) { toast("Type a topic first"); $("#qzTopic", el).focus(); return; }
-      const diff = difficultyFor(topic);
-      area.innerHTML = `<div class="glass card">${LOADING.replace("Thinking…", "Making a " + diff + " quiz…")}</div>`;
+      const count = parseInt(getCount());
+      setLast("quiz?topic=" + encodeURIComponent(topic), "Quiz: " + topic, "📝");
+      area.innerHTML = `<div class="glass card">${LOADING.replace("Thinking…", "Making an adaptive quiz…")}</div>`;
       try {
-        const data = await aiJSON(quizPrompt(topic, parseInt(getCount()), diff));
-        runQuiz(area, data, { topic, again: start });
+        const data = await aiJSON(quizPrompt(topic, count + 3, "", true));
+        runQuiz(area, data, { topic, again: start, adaptive: true, ask: count });
       } catch (e) { area.innerHTML = `<div class="glass card">⚠️ ${esc(e.message)} <button class="btn sm ghost">Retry</button></div>`; $("button", area).onclick = start; }
     };
     $("#qzStart", el).addEventListener("click", start);
@@ -154,6 +222,7 @@ view("cards", {
 
     function review(deck, all) {
       deckId = deck.id;
+      setLast("cards", "Flashcards: " + deck.topic, "🃏");
       queue = (all ? deck.cards : dueCards(deck)).map((c, i) => deck.cards.indexOf(c));
       if (!queue.length) { toast("✅ Nothing due in this deck. Come back later!"); return; }
       done = 0; got = 0;
@@ -166,7 +235,7 @@ view("cards", {
       const c = deck.cards[queue[0]];
       area.innerHTML = `
         <div class="row between small muted" style="margin-bottom:8px"><span>${esc(deck.topic)}</span><span>${queue.length} left</span></div>
-        <div class="flip" id="fcFlip"><div class="flip-inner"><div class="glass face">${esc(c.front)}</div><div class="glass face back">${esc(c.back)}</div></div></div>
+        <div class="flip" id="fcFlip"><div class="flip-inner"><div class="glass face">${esc(c.front)}</div><div class="glass face rear">${esc(c.back)}</div></div></div>
         <p class="muted small center" id="fcHint" style="margin-top:8px">Think of the answer, then tap the card to check</p>
         <div class="row hidden" id="fcGrade" style="margin-top:10px">
           <button class="btn ghost grow" id="fcAgain">😕 Again</button>
