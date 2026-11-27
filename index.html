@@ -1,65 +1,90 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Wayfinder: Find your way to every answer</title>
-  <meta name="description" content="Wayfinder: an AI tutor that guides you to every answer, quizzes you and shows you where to improve.">
-  <meta name="theme-color" content="#0C0B11">
+  <meta name="description" content="Wayfinder is an AI study guide for Indian students: a Socratic tutor, smart practice, planner and a learning record for every chapter.">
+  <meta name="theme-color" content="#F7F7FB">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/app.css">
+  <script src="js/icons.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/i18n.js"></script>
   <script src="js/core.js"></script>
+  <script>applyAppearance();</script>
 </head>
 <body>
-  <div id="bg"></div>
+  <div id="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="dots"></div></div>
   <div id="floaters" aria-hidden="true"></div>
-  <div id="toasts"></div>
+  <div id="toasts" role="status" aria-live="polite"></div>
 
-  <!-- Splash screen -->
-  <div id="splash" class="overlay">
-    <div class="logo logo-img"><img src="icons/logo.png" alt="Wayfinder logo"></div>
-    <h2 class="brand">Wayfinder</h2>
-    <p class="muted slogan">Find your way to every answer</p>
+  <div id="splash">
+    <img src="icons/logo.png" alt="" class="logo-img">
+    <div class="brand">Wayfinder</div>
+    <p class="slogan">Find your way to every answer</p>
   </div>
 
-  <!-- First-time setup (filled by js/onboard.js) -->
+  <div id="auth" class="overlay hidden"></div>
   <div id="onboard" class="overlay hidden"></div>
 
-  <!-- All screens appear here -->
   <main class="app" id="views"></main>
 
-  <!-- Bottom menu -->
-  <nav class="nav glass" aria-label="Main menu">
-    <a href="#home" data-tab="home"><span style="font-size:20px">🏠</span>Home</a>
-    <a href="#learn" data-tab="learn"><span style="font-size:20px">📚</span>Learn</a>
-    <a href="#practice" data-tab="practice"><span style="font-size:20px">✏️</span>Practice</a>
-    <a href="#progress" data-tab="progress"><span style="font-size:20px">📊</span>Progress</a>
-    <a href="#profile" data-tab="profile"><span style="font-size:20px">👤</span>Profile</a>
+  <nav class="nav" aria-label="Main menu">
+    <a href="#home" data-tab="home"><span class="pill" id="nvHome"></span>Home</a>
+    <a href="#learn" data-tab="learn"><span class="pill" id="nvLearn"></span>Learn</a>
+    <a href="#practice" data-tab="practice"><span class="pill" id="nvPractice"></span>Practice</a>
+    <a href="#plan" data-tab="plan"><span class="pill" id="nvPlan"></span>Plan</a>
+    <a href="#progress" data-tab="progress"><span class="pill" id="nvProgress"></span>Progress</a>
   </nav>
 
+  <div id="sheetBack"></div>
+  <div id="sheet" role="dialog" aria-modal="true"></div>
+
+  <script src="js/auth.js"></script>
   <script src="js/home.js"></script>
   <script src="js/learn.js"></script>
   <script src="js/practice.js"></script>
+  <script src="js/plan.js"></script>
   <script src="js/progress.js"></script>
-  <script src="js/profile.js"></script>
-  <script src="js/onboard.js"></script>
+  <script src="js/settings.js"></script>
   <script>
-    applyTheme();
-    // Hide the splash, then show setup (first time) or the app
-    setTimeout(() => {
-      $("#splash").classList.add("gone");
-      setTimeout(() => $("#splash").remove(), 450);
-      if (!getProfile().onboarded) startOnboarding();
-      else render();
-    }, 500);
-    // Install support + offline cache
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    [["nvHome", "home"], ["nvLearn", "book"], ["nvPractice", "target"], ["nvPlan", "calendar"], ["nvProgress", "chart"]].forEach(([id, ic]) => document.getElementById(id).innerHTML = icon(ic, 22));
+
+    function bootApp() {
+      document.body.classList.remove("no-nav");
+      startFloaters();
+      if (!location.hash) location.hash = "home";
+      render();
+      // A focus timer that was running when the app closed carries on
+      const fs = Focus.get();
+      if (fs) { Focus.run(); if (fs.mode === "focus" && !fs.paused) Focus.lockOn(); }
     }
+
+    (async function start() {
+      applyAppearance();
+      i18nStart();
+      loadConfig();
+      const p = Store.pid() ? getProfile() : null;
+      setLanguage(p ? p.language : preLang());
+      setTimeout(async () => {
+        const s = document.getElementById("splash");
+        s.classList.add("gone"); setTimeout(() => s.remove(), 500);
+        if (!Store.pid()) { await loadConfig(); if (await checkGoogleRedirect()) return afterLogin(); return showAuth(); }
+        if (!getProfile().onboarded) return startOnboarding();
+        bootApp();
+      }, 650);
+    })();
+
+    if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyAppearance);
+    if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
   </script>
 </body>
 </html>
